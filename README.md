@@ -25,6 +25,8 @@ Briefly, use the program like this to scan yourself for an open Telnet connectio
 python3 tattlenet.py -ip 127.0.0.1
 ```
 
+![Demo](demo.svg)
+
 There really aren't that many options to get to grips with.
 
 | Option      | Required? | Description                                                                                 |

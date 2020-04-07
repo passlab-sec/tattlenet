@@ -420,4 +420,4 @@ for ip in ips:
 
     # Print summary.
     info('Done!')
-    info('Found', len(listening_targets))
+    # info('Found', len(listening_targets))
