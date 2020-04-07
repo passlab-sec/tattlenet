@@ -79,7 +79,14 @@ def split_multi_arg (arg, delim=';'):
     return arg.split(delim)
 
 
-def is_telnet_open (host, port=23, timeout=2):
+class TelnetStatus(Enum):
+    UNKNOWN = 0
+    HOST_UNREACHABLE = 1
+    CONN_REFUSED = 2
+    TELNET_OPEN = 3
+
+
+def get_telnet_status (host, port=23, timeout=2):
     """ Determines whether Telnet is open on the specified remote host.
     Args:
         host (str): The address of the remote host
@@ -88,17 +95,19 @@ def is_telnet_open (host, port=23, timeout=2):
     Returns:
         True if Telnet is open and listening on the remote host, otherwise false
     """
-    result = False
+    result = TelnetStatus.UNKNOWN
     try:
         with Telnet(host, port, timeout=timeout) as tn:
             tn.read_some() # Read a little bit from the socket.
-            result = True
-    except:
-        result = False
+            result = TelnetStatus.TELNET_OPEN
+    except ConnectionRefusedError:
+        result = TelnetStatus.CONN_REFUSED
+    except OSError:
+        result = TelnetStatus.HOST_UNREACHABLE
     return result
 
 
-class TelnetStatus(Enum):
+class TelnetLoginStatus(Enum):
     """ An enumeration of ready states that a Telnet connection can hold.
     """
     LOGIN_INCORRECT = 0
@@ -113,7 +122,7 @@ def get_status (tn):
     Args:
         tn (Telnet): The Telnet connection
     Returns:
-        TelnetStatus: The status of the connection
+        TelnetLoginStatus: The status of the connection
     """
     result = tn.expect([
         b'incorrect',
@@ -121,7 +130,7 @@ def get_status (tn):
         b'login:',
         b'Password:',
         b'exceeded'])
-    return TelnetStatus(result[0])
+    return TelnetLoginStatus(result[0])
 
 
 class LoginAttemptStatus(Enum):
@@ -142,19 +151,19 @@ def guess (tn, login, password):
     Returns:
     """
     status = get_status(tn) # Update status.
-    if status == TelnetStatus.LOGIN_PROMPT:
+    if status == TelnetLoginStatus.LOGIN_PROMPT:
         tn.write(login.encode('ascii') + b'\n') # Enter login.
-    elif status == TelnetStatus.MAXED_RETRIES:
+    elif status == TelnetLoginStatus.MAXED_RETRIES:
         return LoginAttemptStatus.FAIL_AND_CLOSE # Maxed out our retries.
     status = get_status(tn) # Update status.
-    if status == TelnetStatus.PASSWORD_PROMPT:
+    if status == TelnetLoginStatus.PASSWORD_PROMPT:
         tn.write(password.encode('ascii') + b'\n') # Enter password.
-    elif status == TelnetStatus.LOGIN_INCORRECT:
+    elif status == TelnetLoginStatus.LOGIN_INCORRECT:
         return LoginAttemptStatus.FAIL_AND_RETRY # Failed out of the login prompt and back to the login prompt. Retry.
     status = get_status(tn) # Update status.
-    if status == TelnetStatus.SHELL_PROMPT:
+    if status == TelnetLoginStatus.SHELL_PROMPT:
         return LoginAttemptStatus.SUCCESS_SHELL # We got a shell!
-    elif status == TelnetStatus.LOGIN_INCORRECT:
+    elif status == TelnetLoginStatus.LOGIN_INCORRECT:
         return LoginAttemptStatus.FAIL_AND_RETRY # Login incorrect.
     return LoginAttemptStatus.FAIL_UNKNOWN # Fatal unknown error.
 
@@ -165,18 +174,19 @@ def printc (color, *args, sep=' ', **kwargs):
         color (str): The colour to print the message
         sep (str): The separator to insert between values (identical to the `sep` paramater to `print`)
         args (list of str): Arguments to pass to the underlying `print` call
-        kwards (dict of str): Additional keywords to pass to the underlying `print` call
+        kwards (dict): Additional keywords to pass to the underlying `print` call
     """
     print(colored(sep.join(map(str, args)), color), **kwargs)
 
 
 # Partially apply `printc` for logging colours.
 info = partial(printc, 'cyan')
-fail = partial(printc, 'magenta')
+fail = partial(printc, 'blue')
 warn = partial(printc, 'yellow')
 success = partial(printc, 'green')
 error = partial(printc, 'red')
 fatal = partial(error, 'Fatal:')
+irrelevant = partial(printc, 'magenta')
 
 
 def valid_octet (oct):
@@ -233,6 +243,35 @@ def expand_ip (ip):
     return out
 
 
+def count_candidates (range):
+    """ Counts the number of IP addresses that would result from enumeration of a list struture produced by `expand_ip`.
+    Args:
+        range (list of list of int): The enumerable list structure
+    Return:
+        int: The number of distinct IP addresses
+    """
+    # Multiply together list lengths.
+    return reduce(lambda x, y: x * y, [len(r) for r in range], 1)
+
+
+def enumerate_ip_range (range, pref=''):
+    """ Enumerates a list struture produced by `expand_ip`.
+    Args:
+        range (list of list of int): The enumerable list structure
+        pref (str): The current prefix (used for recursion)
+    Return:
+        list of str: The enumerated list of IP addresses
+    """
+    separator = '' if pref == '' else '.' # Determine necessary separator.
+    if len(range) == 0:
+        return [pref] # Base case, just return prefix.
+    ips = []
+    for octet in range[0]:
+        # Make recursive call.
+        ips.extend(enumerate_ip_range(range[1:], pref + separator + str(octet)))
+    return ips
+
+
 def brute (creds, host, port=23, break_on_success=True, timeout=None):
     """ Bruteforces a Telnet connection on a remote host using a list of credential pairs.
     Args:
@@ -258,7 +297,7 @@ def brute (creds, host, port=23, break_on_success=True, timeout=None):
     # Loop over dictionary of guesses.
     i = 0
     while i < len(creds):
-        login, password = creds[i] # Destructure login/password tuple.
+        login, password = creds[i]['login'], creds[i]['password'] # Destructure login/password tuple.
         info('\u2191 Guess going up:', login + ':' + password)
         result = guess(tn, login, password) # Get result from Telnet connection.
         if result == LoginAttemptStatus.SUCCESS_SHELL: # We got a shell, nice!
@@ -276,42 +315,42 @@ def brute (creds, host, port=23, break_on_success=True, timeout=None):
     return result
 
 
-def enumerate_ip_range (lst, pref=''):
-    separator = '' if pref == '' else '.' # Determine necessary separator.
-    out = []
-    if len(lst) == 1:
-        return [pref + separator + str(i) for i in lst[0]]
-    else:
-        acc = []
-        for p in lst[0]:
-            acc.extend(enumerate_ip_range(lst[1:], pref + separator + str(p)))
-        return acc
+def load_creds (path):
+    """ Loads a credentials file.
+    Args:
+        path (str): The path of the file to load
+    Returns:
+        list of dict: The credentials from the file as dictionaries containing 'login' and 'password' keys
+    """
+    creds = []
+    with open(path, 'r') as file:
+        for line in file:
+            login, password = line.strip().replace('(none)', '').split(':')
+            creds.append({'login': login, 'password': password})
+    return creds
 
-def count_candidates (lst):
-    lens = [len(l) for l in lst]
-    return reduce(lambda x, y: x * y, lens, 1)
-
-def load_creds (file):
-    pairs = []
-    with open(file, 'r') as f:
-        for line in f:
-            pairs.append(line.strip().replace('(none)', '').split(':'))
-    return pairs
 
 def load_target_list (file):
-    lines = []
+    """ Loads a targets file.
+    Args:
+        path (str): The path of the file to load
+    Returns:
+        list of str: The targets from the file
+    """
+    targets = []
     with open(file, 'r') as f:
         for line in f:
-            lines.append(line)
-    return lines
+            targets.append(line.strip())
+    return targets
 
-
-# Persist with guesses even if we successfully guess password?
-break_on_success = not is_arg_passed('p')
 
 # Print banner unless we're suppressing it.
-if not is_arg_passed('b'):
+if not is_arg_passed('s'):
     print_banner()
+
+# Capture command-line flags.
+break_on_success = not is_arg_passed('b') # Persist with guesses even if we successfully guess password?
+pwd_audit = is_arg_passed('p') # Run password security audit?
 
 # Get targets passed.
 ips = get_valued_arg('ip')
@@ -319,7 +358,8 @@ if ips == None:
     ip_file = get_valued_arg('f') # Assume file instead.
     if ip_file != None:
         if not os.path.isfile(ip_file):
-            error('Could not read target file.')
+            fatal('Could not read target file.')
+            exit(1)
         ips = load_target_list(ip_file) # Read targets from file.
 else:
     ips = [ips] # Make this a list too.
@@ -328,32 +368,48 @@ else:
 if ips == None:
     fatal('No targets specified. Use -ip or -f.')
 
-# Load credentials file.
-creds = None
-creds_file = get_valued_arg('c')
-if creds_file != None:
-    if not os.path.isfile(creds_file):
-        fatal('Could not read credentials file.')
-    creds = load_creds(creds_file)
+# We only need credentials if we're doing a password audit.
+if pwd_audit:
+    # Let user know password security audit is enabled.
+    info('Password security *WILL* be audited because -p flag passed.')
 
-# No IP address passed.
-if creds == None:
-    fatal('No credentials specified. Use -c.')
+    # Load credentials file.
+    creds = None
+    creds_file = get_valued_arg('c')
+    if creds_file != None:
+        if not os.path.isfile(creds_file):
+            fatal('Could not read credentials file.')
+            exit(1)
+        creds = load_creds(creds_file)
+
+    # No IP address passed.
+    if creds == None:
+        fatal('No credentials specified. Use -c.')
+        exit(1)
+else:
+    # Let user know password security audit is disabled.
+    info('Password security will *NOT* be audited because -p flag not passed.')
 
 # For every IP (or range expression).
 for ip in ips:
     expanded_ip = expand_ip(ip) # Expand embedded ranges.
     target_count = count_candidates(expanded_ip) # How many candidates?
-    info('Now auditing range', ip, 'containing', target_count, 'addresses for open ports...')
+    info('Now auditing range', ip, 'containing', target_count, 'address(es) for open ports...')
     enumerated_ips = enumerate_ip_range(expanded_ip)
     listening_targets = []
     for enumerated_ip in enumerated_ips:
-        if is_telnet_open(enumerated_ip, timeout=0.1):
+        status = get_telnet_status(enumerated_ip, timeout=0.1)
+        if status == TelnetStatus.TELNET_OPEN:
             success('Telnet is open on host:', enumerated_ip)
             listening_targets.append(enumerated_ip)
-        else:
+        elif status == TelnetStatus.CONN_REFUSED:
             fail('Telnet is closed on host:', enumerated_ip)
-    info('Found', len(listening_targets), 'listening targets. Now auditing password security...')
-    for listening_target in listening_targets:
-        info('Now bruting', listening_target, 'with', len(creds), 'login/password pairs')
-        brute(creds, listening_target, break_on_success=break_on_success)
+        elif status == TelnetStatus.HOST_UNREACHABLE:
+            irrelevant('Host is inaccessible:', enumerated_ip)
+    info('Found', len(listening_targets), 'listening targets.')
+    if pwd_audit:
+        info('Now auditing password security...')
+        for listening_target in listening_targets:
+            info('Now bruting', listening_target, 'with', len(creds), 'login/password pairs')
+            brute(creds, listening_target, break_on_success=break_on_success)
+    info('Done!')
