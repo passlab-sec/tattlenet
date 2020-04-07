@@ -281,7 +281,7 @@ def brute (creds, host, port=23, break_on_success=True, timeout=None):
         break_on_success (bool): If true, breaks on a successful login, if false continues
         timeout (float): Time to wait on a Telnet connection before timing out in seconds
     Return:
-        bool: True if successful, otherwise false
+        list of dict: Credentials tried successfully on the machine
     """
     result = False # Assume failure.
 
@@ -392,24 +392,32 @@ else:
 
 # For every IP (or range expression).
 for ip in ips:
+    # This might be an IP range (e.g. 192.168.0-10.*)
     expanded_ip = expand_ip(ip) # Expand embedded ranges.
     target_count = count_candidates(expanded_ip) # How many candidates?
     info('Now auditing range', ip, 'containing', target_count, 'address(es) for open ports...')
+
+    # Enumerate range.
     enumerated_ips = enumerate_ip_range(expanded_ip)
     listening_targets = []
     for enumerated_ip in enumerated_ips:
         status = get_telnet_status(enumerated_ip, timeout=0.1)
         if status == TelnetStatus.TELNET_OPEN:
-            success('Telnet is open on host:', enumerated_ip)
+            success('Telnet is open on host:', enumerated_ip) # Telnet is open.
             listening_targets.append(enumerated_ip)
         elif status == TelnetStatus.CONN_REFUSED:
-            fail('Telnet is closed on host:', enumerated_ip)
+            fail('Telnet is closed on host:', enumerated_ip) # Host is online, Telnet isn't.
         elif status == TelnetStatus.HOST_UNREACHABLE:
-            irrelevant('Host is inaccessible:', enumerated_ip)
+            irrelevant('Host is inaccessible:', enumerated_ip) # Host is unreachable.
     info('Found', len(listening_targets), 'listening targets.')
+
+    # If password security audit desired, launch guessing attack(s).
     if pwd_audit:
         info('Now auditing password security...')
         for listening_target in listening_targets:
             info('Now bruting', listening_target, 'with', len(creds), 'login/password pairs')
             brute(creds, listening_target, break_on_success=break_on_success)
+
+    # Print summary.
     info('Done!')
+    info('Found', len(listening_targets))
