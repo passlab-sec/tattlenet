@@ -37,3 +37,12 @@ There really aren't that many options to get to grips with.
 | `-c <file>` | No        | Specifies the file containing credentials to guess. Only relevant in combination with `-p`. |
 
 _\*One or the other of these is required_
+
+## Disclaimer
+The standard disclaimer in the MIT license, under which this project is licensed, applies. Also, please use this utility
+for its intended purpose: *auditing networks for insecure devices*. Ensure you have permission, in writing, to run this
+tool on any network you do not personally own and adhere to applicable laws in your jurisdiction.
+
+## Acknowlegements
+* The Mirai attack dictionary bundled with this work was extracted from the [Mirai source code repository](https://github.com/jgamblin/Mirai-Source-Code).
+* The font used in the logo is [LCD Solid](https://www.fontspace.com/lcd-solid-font-f11346).
