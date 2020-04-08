@@ -25,6 +25,8 @@ Briefly, use the program like this to scan yourself for an open Telnet connectio
 python3 tattlenet.py -ip 127.0.0.1
 ```
 
+Here's a quick animation showing how to use Tattlenet to scan IP addresses 192.168.66.100-130 for open Telnet ports and audit their password security using the attack dictionary from the original strain of the [Mirai botnet worm](https://github.com/jgamblin/Mirai-Source-Code):
+
 ![Demo](demo.svg)
 
 There really aren't that many options to get to grips with.
