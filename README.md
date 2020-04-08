@@ -39,6 +39,7 @@ There really aren't that many options to get to grips with.
 | `-b`        | No        | Forces exhaustive password guessing attacks, rather than stopping on successful login.      |
 | `-s`        | No        | Silences the banner.                                                                        |
 | `-c <file>` | No        | Specifies the file containing credentials to guess. Only relevant in combination with `-p`. |
+| `-n <num>`  | No        | Specifies the port number to connect to. Defaults to standard port 23 for Telnet.           |
 
 _\*One or the other of these is required_
 

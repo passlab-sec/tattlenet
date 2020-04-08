@@ -348,6 +348,11 @@ def load_target_list (file):
 if not is_arg_passed('s'):
     print_banner()
 
+# Get port number.
+port_num = get_int_valued_arg('n')
+if port_num == None:
+    port_num = 23
+
 # Capture command-line flags.
 break_on_success = not is_arg_passed('b') # Persist with guesses even if we successfully guess password?
 pwd_audit = is_arg_passed('p') # Run password security audit?
@@ -369,12 +374,12 @@ if ips == None:
     fatal('No targets specified. Use -ip or -f.')
 
 # We only need credentials if we're doing a password audit.
+creds = None
 if pwd_audit:
     # Let user know password security audit is enabled.
     info('Password security *WILL* be audited because -p flag passed.')
 
     # Load credentials file.
-    creds = None
     creds_file = get_valued_arg('c')
     if creds_file != None:
         if not os.path.isfile(creds_file):
@@ -415,9 +420,8 @@ for ip in ips:
     if pwd_audit:
         info('Now auditing password security...')
         for listening_target in listening_targets:
-            info('Now bruting', listening_target, 'with', len(creds), 'login/password pairs')
-            brute(creds, listening_target, break_on_success=break_on_success)
+            info('Now bruting', listening_target, 'on port', port_num, 'with', len(creds), 'login/password pairs')
+            brute(creds, listening_target, port=port_num, break_on_success=break_on_success)
 
     # Print summary.
     info('Done!')
-    # info('Found', len(listening_targets))
