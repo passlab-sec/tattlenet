@@ -40,6 +40,7 @@ There really aren't that many options to get to grips with.
 | `-s`        | No        | Silences the banner.                                                                        |
 | `-c <file>` | No        | Specifies the file containing credentials to guess. Only relevant in combination with `-p`. |
 | `-n <num>`  | No        | Specifies the port number to connect to. Defaults to standard port 23 for Telnet.           |
+| `-t <num>`  | No        | Specifies a timeout to wait for a response from devices connected to. Defaults to 1 second. |
 
 _\*One or the other of these is required_
 

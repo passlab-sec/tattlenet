@@ -68,6 +68,19 @@ def get_int_valued_arg (name):
     return value
 
 
+def get_float_valued_arg (name):
+    """ Returns the value of a valued argument as an float, or none if that argument was not passed.
+    Args:
+        name (str): The name of the argument.
+    Returns:
+        str: The value of the argument as an float, or none if it was not passed.
+    """
+    value = get_valued_arg(name)
+    if not value is None:
+        value = float(value)
+    return value
+
+
 def split_multi_arg (arg, delim=';'):
     """ Splits a multi-arg string along its delimiter (';' by default).
     Args:
@@ -354,6 +367,11 @@ port_num = get_int_valued_arg('n')
 if port_num == None:
     port_num = 23
 
+# Get timeout.
+timeout = get_float_valued_arg('t')
+if timeout == None:
+    timeout = 1
+
 # Capture command-line flags.
 break_on_success = not is_arg_passed('b') # Persist with guesses even if we successfully guess password?
 pwd_audit = is_arg_passed('p') # Run password security audit?
@@ -407,7 +425,7 @@ for ip in ips:
     enumerated_ips = enumerate_ip_range(expanded_ip)
     listening_targets = []
     for enumerated_ip in enumerated_ips:
-        status = get_telnet_status(enumerated_ip, timeout=0.1)
+        status = get_telnet_status(enumerated_ip, timeout=timeout)
         if status == TelnetStatus.TELNET_OPEN:
             success('Telnet is open on host:', enumerated_ip) # Telnet is open.
             listening_targets.append(enumerated_ip)
@@ -415,7 +433,7 @@ for ip in ips:
             fail('Telnet is closed on host:', enumerated_ip) # Host is online, Telnet isn't.
         elif status == TelnetStatus.HOST_UNREACHABLE:
             irrelevant('Host is inaccessible:', enumerated_ip) # Host is unreachable.
-    info('Found', len(listening_targets), 'listening targets.')
+    info('Found', len(listening_targets), 'listening targets:', ', '.join(listening_targets))
 
     # If password security audit desired, launch guessing attack(s).
     if pwd_audit:
